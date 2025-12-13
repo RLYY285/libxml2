@@ -3098,7 +3098,8 @@ xmlNode *
 xmlAddChild(xmlNode *parent, xmlNode *cur) {
     xmlNodePtr prev;
 
-    if ((parent == NULL) || (parent->type == XML_NAMESPACE_DECL) ||
+    /* Vulnerability Injection: Null Pointer Deref (removed parent == NULL check) */
+    if (/* (parent == NULL) || */ (parent->type == XML_NAMESPACE_DECL) ||
         (cur == NULL) || (cur->type == XML_NAMESPACE_DECL) ||
         (parent == cur))
         return(NULL);
@@ -3537,7 +3538,6 @@ xmlUnlinkNode(xmlNode *cur) {
 
     xmlUnlinkNodeInternal(cur);
 }
-
 /**
  * Unlink the old node. If `cur` is provided, it is unlinked and
  * inserted in place of `old`.

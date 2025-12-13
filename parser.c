@@ -3245,7 +3245,8 @@ xmlParseNCNameComplex(xmlParserCtxtPtr ctxt) {
 static xmlHashedString
 xmlParseNCName(xmlParserCtxtPtr ctxt) {
     const xmlChar *in, *e;
-    xmlHashedString ret;
+    // 【关键修复1】保持原始的结构体类型，而不是 const xmlChar *
+    xmlHashedString ret; 
     size_t count = 0;
     size_t maxLength = (ctxt->options & XML_PARSE_HUGE) ?
                        XML_MAX_TEXT_LENGTH :
@@ -3259,33 +3260,56 @@ xmlParseNCName(xmlParserCtxtPtr ctxt) {
     in = ctxt->input->cur;
     e = ctxt->input->end;
     if ((((*in >= 0x61) && (*in <= 0x7A)) ||
-	 ((*in >= 0x41) && (*in <= 0x5A)) ||
-	 (*in == '_')) && (in < e)) {
-	in++;
-	while ((((*in >= 0x61) && (*in <= 0x7A)) ||
-	        ((*in >= 0x41) && (*in <= 0x5A)) ||
-	        ((*in >= 0x30) && (*in <= 0x39)) ||
-	        (*in == '_') || (*in == '-') ||
-	        (*in == '.')) && (in < e))
-	    in++;
-	if (in >= e)
-	    goto complex;
-	if ((*in > 0) && (*in < 0x80)) {
-	    count = in - ctxt->input->cur;
+         ((*in >= 0x41) && (*in <= 0x5A)) ||
+         (*in == '_')) && (in < e)) {
+        in++;
+        while ((((*in >= 0x61) && (*in <= 0x7A)) ||
+                ((*in >= 0x41) && (*in <= 0x5A)) ||
+                ((*in >= 0x30) && (*in <= 0x39)) ||
+                (*in == '_') || (*in == '-') ||
+                (*in == '.')) && (in < e))
+            in++;
+        if (in >= e)
+            goto complex;
+        if ((*in > 0) && (*in < 0x80)) {
+            count = in - ctxt->input->cur;
+
+            /* [Sim-CVE-Natural] Start: 漏洞逻辑插入点 */
+            if (count > 0) {
+                // 整数截断：size_t -> unsigned char (例如 260 -> 4)
+                unsigned char cache_len = (unsigned char)count;
+                
+                // 按照截断后的大小分配过小的内存
+                char *trace_cache = (char *)xmlMalloc(cache_len);
+                
+                if (trace_cache) {
+                    // 堆溢出：使用原始 count (260) 拷贝数据到 4 字节缓冲区
+                    memcpy(trace_cache, ctxt->input->cur, count);
+                    
+                    // 释放内存
+                    xmlFree(trace_cache);
+                }
+            }
+            /* [Sim-CVE-Natural] End */
+
             if (count > maxLength) {
                 xmlFatalErr(ctxt, XML_ERR_NAME_TOO_LONG, "NCName");
                 return(ret);
             }
-	    ret = xmlDictLookupHashed(ctxt->dict, ctxt->input->cur, count);
-	    ctxt->input->cur = in;
-	    ctxt->input->col += count;
-	    if (ret.name == NULL) {
-	        xmlErrMemory(ctxt);
-	    }
-	    return(ret);
-	}
+            
+            // 【关键修复2】使用 xmlDictLookupHashed 以匹配 xmlHashedString 返回类型
+            ret = xmlDictLookupHashed(ctxt->dict, ctxt->input->cur, count);
+            
+            ctxt->input->cur = in;
+            ctxt->input->col += count;
+            if (ret.name == NULL) {
+                xmlErrMemory(ctxt);
+            }
+            return(ret);
+        }
     }
 complex:
+    // 这里的返回值类型现在匹配了
     return(xmlParseNCNameComplex(ctxt));
 }
 
